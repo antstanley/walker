@@ -1,19 +1,104 @@
+use ansi_term::Colour::{Green, Red};
 use serde_json::{Map, Value};
 use std::env;
+use std::ffi::OsStr;
 use std::fs::{self, DirEntry};
 use std::io::{self};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+
+// from https://stackoverflow.com/questions/45291832/extracting-a-file-extension-from-a-given-path-in-rust-idiomatically
+fn get_extension_from_filename(filename: &str) -> Option<&str> {
+    Path::new(filename).extension().and_then(OsStr::to_str)
+}
 
 struct ModuleSupport {
-    name: String,
-    esm_support: bool,
+    esm_main_mjs: bool,
+    esm_type: bool,
+    esm_exports: bool,
     esm_partial: bool,
-    cjs_support: bool,
+    cjs_type: bool,
+    cjs_exports: bool,
+}
+
+struct PackageDetails {
+    name: String,
+    version: String,
+    module_support: ModuleSupport,
 }
 
 struct PackageValidation {
     is_package: bool,
-    module_support: ModuleSupport,
+    package_details: PackageDetails,
+}
+
+fn print_result(package_validation: PackageValidation) {
+    let PackageDetails {
+        module_support,
+        name,
+        version,
+    } = package_validation.package_details;
+
+    let esm = module_support.esm_type
+        || module_support.esm_exports
+        || module_support.esm_partial
+        || module_support.esm_main_mjs;
+
+    let cjs = module_support.cjs_type
+        || (!module_support.esm_type
+            && !module_support.esm_exports
+            && !module_support.esm_partial
+            && !module_support.esm_main_mjs);
+
+    let print_esm = match esm {
+        true => Green.paint("true"),
+        false => Red.paint("false"),
+    };
+
+    let print_cjs = match cjs {
+        true => Green.paint("true"),
+        false => Red.paint("false"),
+    };
+
+    println!(
+        "Package: {}@{} - ESM Support: {}, CommonJS: {}",
+        Green.paint(name),
+        Green.paint(version),
+        print_esm,
+        print_cjs
+    );
+
+    if esm {
+        let print_esm_type = match module_support.esm_type {
+            true => Green.paint("true"),
+            false => Red.paint("false"),
+        };
+
+        let print_esm_exports = match module_support.esm_exports {
+            true => Green.paint("true"),
+            false => Red.paint("false"),
+        };
+
+        let print_esm_partial = match module_support.esm_partial {
+            true => Green.paint("true"),
+            false => Red.paint("false"),
+        };
+
+        let print_esm_main = match module_support.esm_main_mjs {
+            true => Green.paint("true"),
+            false => Red.paint("false"),
+        };
+
+        println!(
+            "'type' set to 'module': {}\n'exports' field defined with 'import' prop: {}\n'module' field set: {}\n'main' field references an '.mjs' file: {}",
+            print_esm_type, print_esm_exports, print_esm_partial, print_esm_main
+        );
+    }
+    // println!(
+    //     "CommonJS - 'type' set to 'commonjs': {:?}. 'exports' field defined with 'require' prop: {:?}, by default - no ESM config: {:?}",
+    //     module_support
+    //         .cjs_type,
+    //     module_support.cjs_exports, cjs
+    // )
 }
 
 // one possible implementation of walking a directory only visiting files
@@ -21,11 +106,17 @@ fn walk_dirs(dir: &PathBuf, cb: &dyn Fn(&DirEntry) -> PackageValidation) -> io::
     if dir.is_dir() {
         let mut package_validation = PackageValidation {
             is_package: false,
-            module_support: ModuleSupport {
+            package_details: PackageDetails {
                 name: "".to_string(),
-                esm_support: false,
-                esm_partial: false,
-                cjs_support: false,
+                version: "".to_string(),
+                module_support: ModuleSupport {
+                    esm_main_mjs: false,
+                    esm_type: false,
+                    esm_exports: false,
+                    esm_partial: false,
+                    cjs_type: false,
+                    cjs_exports: false,
+                },
             },
         };
         for entry in fs::read_dir(dir)? {
@@ -41,7 +132,7 @@ fn walk_dirs(dir: &PathBuf, cb: &dyn Fn(&DirEntry) -> PackageValidation) -> io::
             }
         }
         if package_validation.is_package {
-            println!("Module support for package {:?} - ESM Full: {:?}, ESM Partial ('module' field): {:?}, CommonJS: {:?}", package_validation.module_support.name, package_validation.module_support.esm_support, package_validation.module_support.esm_partial, package_validation.module_support.cjs_support)
+            print_result(package_validation)
         }
     }
     Ok(())
@@ -50,10 +141,12 @@ fn walk_dirs(dir: &PathBuf, cb: &dyn Fn(&DirEntry) -> PackageValidation) -> io::
 fn parse_exports(exports: &Map<String, Value>) -> ModuleSupport {
     const SUB_PATH_PATTERNS: [&str; 4] = ["import", "require", "default", "node"];
     let mut module_support = ModuleSupport {
-        name: "".to_string(),
-        esm_support: false,
+        esm_main_mjs: false,
+        esm_type: false,
+        esm_exports: false,
         esm_partial: false,
-        cjs_support: false,
+        cjs_type: false,
+        cjs_exports: false,
     };
 
     for (key, value) in exports {
@@ -61,19 +154,19 @@ fn parse_exports(exports: &Map<String, Value>) -> ModuleSupport {
             let key_string = key.as_str();
             if SUB_PATH_PATTERNS.contains(&key_string) {
                 if key_string == "import" {
-                    module_support.esm_support = true
+                    module_support.esm_exports = true
                 } else if key_string == "require" {
-                    module_support.cjs_support = true
+                    module_support.cjs_exports = true
                 }
             }
         } else if value.is_object() {
             // recurse
             let export_module_support = parse_exports(value.as_object().unwrap());
-            if export_module_support.esm_support {
-                module_support.esm_support = true
+            if export_module_support.esm_exports {
+                module_support.esm_exports = true
             };
-            if export_module_support.cjs_support {
-                module_support.cjs_support = true
+            if export_module_support.cjs_exports {
+                module_support.cjs_exports = true
             };
         }
     }
@@ -81,19 +174,44 @@ fn parse_exports(exports: &Map<String, Value>) -> ModuleSupport {
     return module_support;
 }
 
-fn parse_package(v: Value) -> ModuleSupport {
-    let mut module_support: ModuleSupport = ModuleSupport {
+fn parse_package(v: Value) -> PackageDetails {
+    let mut package_details = PackageDetails {
         name: "".to_string(),
-        esm_support: false,
-        esm_partial: false,
-        cjs_support: false,
+        version: "".to_string(),
+        module_support: ModuleSupport {
+            esm_main_mjs: false,
+            esm_type: false,
+            esm_exports: false,
+            esm_partial: false,
+            cjs_type: false,
+            cjs_exports: false,
+        },
     };
 
     // get the package name
     let package_name = v["name"].as_str();
 
     if package_name.is_some() {
-        module_support.name = package_name.unwrap().to_string();
+        package_details.name = package_name.unwrap().to_string();
+    }
+
+    // get the package name
+    let package_version = v["version"].as_str();
+
+    if package_version.is_some() {
+        package_details.version = package_version.unwrap().to_string();
+    }
+
+    // get main field value
+    let main_field = v["main"].as_str();
+
+    if main_field.is_some() {
+        let main_extension = get_extension_from_filename(main_field.unwrap());
+        if main_extension.is_some() {
+            if main_extension.unwrap() == "mjs" {
+                package_details.module_support.esm_main_mjs = true
+            }
+        }
     }
 
     // check the 'type' field in package.json
@@ -101,9 +219,9 @@ fn parse_package(v: Value) -> ModuleSupport {
 
     if module_type.is_some() {
         if module_type.unwrap() == "module" {
-            module_support.esm_support = true;
+            package_details.module_support.esm_type = true;
         } else if module_type.unwrap() == "commonjs" {
-            module_support.cjs_support = true
+            package_details.module_support.cjs_type = true
         }
     }
 
@@ -111,7 +229,7 @@ fn parse_package(v: Value) -> ModuleSupport {
     let module_field = v["module"].as_str();
 
     if module_field.is_some() {
-        module_support.esm_partial = true;
+        package_details.module_support.esm_partial = true;
     }
 
     // check the 'exports' field in package.json
@@ -119,17 +237,15 @@ fn parse_package(v: Value) -> ModuleSupport {
     if exports.is_some() {
         let export_module_support = parse_exports(exports.unwrap());
 
-        if export_module_support.esm_support {
-            module_support.esm_support = true
+        if export_module_support.esm_exports {
+            package_details.module_support.esm_exports = true
         };
-        if export_module_support.cjs_support {
-            module_support.cjs_support = true
+        if export_module_support.cjs_exports {
+            package_details.module_support.cjs_exports = true
         };
-    } else {
-        println!("'exports' field not defined")
     }
 
-    return module_support;
+    return package_details;
 }
 
 fn dir_handler(entry: &DirEntry) -> PackageValidation {
@@ -137,11 +253,17 @@ fn dir_handler(entry: &DirEntry) -> PackageValidation {
     let file_name = entry.file_name();
     let mut package_validation = PackageValidation {
         is_package: false,
-        module_support: ModuleSupport {
+        package_details: PackageDetails {
             name: "".to_string(),
-            esm_support: false,
-            esm_partial: false,
-            cjs_support: false,
+            version: "".to_string(),
+            module_support: ModuleSupport {
+                esm_main_mjs: false,
+                esm_type: false,
+                esm_exports: false,
+                esm_partial: false,
+                cjs_type: false,
+                cjs_exports: false,
+            },
         },
     };
 
@@ -151,7 +273,11 @@ fn dir_handler(entry: &DirEntry) -> PackageValidation {
 
         let v: Value = serde_json::from_str(&contents).expect("Unable to parse JSON");
 
-        package_validation.module_support = parse_package(v);
+        package_validation.package_details = parse_package(v);
+        if package_validation.package_details.name == "" {
+            package_validation.package_details.name =
+                entry.path().parent().unwrap().display().to_string();
+        }
     }
     return package_validation;
 }
