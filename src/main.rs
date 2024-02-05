@@ -23,6 +23,7 @@ struct ModuleSupport {
 struct PackageDetails {
     name: String,
     version: String,
+    size: u64,
     module_support: ModuleSupport,
 }
 
@@ -35,6 +36,7 @@ fn print_result(package_validation: PackageValidation) {
     let PackageDetails {
         module_support,
         name,
+        size,
         version,
     } = package_validation.package_details;
 
@@ -60,9 +62,10 @@ fn print_result(package_validation: PackageValidation) {
     };
 
     println!(
-        "Package: {}@{} - ESM Support: {}, CommonJS: {}",
+        "Package: {}@{}, size: {} - ESM Support: {}, CommonJS: {}",
         Green.paint(name),
         Green.paint(version),
+        size,
         print_esm,
         print_cjs
     );
@@ -109,6 +112,7 @@ fn walk_dirs(dir: &PathBuf, cb: &dyn Fn(&DirEntry) -> PackageValidation) -> io::
             package_details: PackageDetails {
                 name: "".to_string(),
                 version: "".to_string(),
+                size: 0,
                 module_support: ModuleSupport {
                     esm_main_mjs: false,
                     esm_type: false,
@@ -119,19 +123,28 @@ fn walk_dirs(dir: &PathBuf, cb: &dyn Fn(&DirEntry) -> PackageValidation) -> io::
                 },
             },
         };
+        let mut package_size: u64 = 0;
         for entry in fs::read_dir(dir)? {
             let entry = entry?;
             let path = entry.path();
             if path.is_dir() {
                 walk_dirs(&path, cb)?;
             } else {
+                let metadata = entry.metadata().expect("Unable to retrieve file metadata");
+
+                let file_size = metadata.len();
+
+                package_size = package_size + file_size;
+
                 let file_package_validation = cb(&entry);
                 if file_package_validation.is_package {
                     package_validation = file_package_validation
                 }
             }
         }
+
         if package_validation.is_package {
+            package_validation.package_details.size = package_size;
             print_result(package_validation)
         }
     }
@@ -178,6 +191,7 @@ fn parse_package(v: Value) -> PackageDetails {
     let mut package_details = PackageDetails {
         name: "".to_string(),
         version: "".to_string(),
+        size: 0,
         module_support: ModuleSupport {
             esm_main_mjs: false,
             esm_type: false,
@@ -256,6 +270,7 @@ fn dir_handler(entry: &DirEntry) -> PackageValidation {
         package_details: PackageDetails {
             name: "".to_string(),
             version: "".to_string(),
+            size: 0,
             module_support: ModuleSupport {
                 esm_main_mjs: false,
                 esm_type: false,
@@ -266,7 +281,6 @@ fn dir_handler(entry: &DirEntry) -> PackageValidation {
             },
         },
     };
-
     if file_name == "package.json" {
         package_validation.is_package = true;
         let contents = fs::read_to_string(path).expect("Unable to read file {path}");
