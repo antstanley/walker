@@ -4,6 +4,7 @@ use std::env;
 use std::ffi::OsStr;
 use std::fs::{self, DirEntry};
 use std::io::{self};
+use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
 // from https://stackoverflow.com/questions/45291832/extracting-a-file-extension-from-a-given-path-in-rust-idiomatically
@@ -23,8 +24,8 @@ struct ModuleSupport {
 struct PackageDetails {
     name: String,
     version: String,
-    size: u64,
     module_support: ModuleSupport,
+    size: u64,
 }
 
 struct PackageValidation {
@@ -36,8 +37,8 @@ fn print_result(package_validation: PackageValidation) {
     let PackageDetails {
         module_support,
         name,
-        size,
         version,
+        size,
     } = package_validation.package_details;
 
     let esm = module_support.esm_type
@@ -70,38 +71,32 @@ fn print_result(package_validation: PackageValidation) {
         print_cjs
     );
 
-    if esm {
-        let print_esm_type = match module_support.esm_type {
-            true => Green.paint("true"),
-            false => Red.paint("false"),
-        };
+    //if esm {
+    //    let print_esm_type = match module_support.esm_type {
+    //        true => Green.paint("true"),
+    //        false => Red.paint("false"),
+    //    };
 
-        let print_esm_exports = match module_support.esm_exports {
-            true => Green.paint("true"),
-            false => Red.paint("false"),
-        };
+    //    let print_esm_exports = match module_support.esm_exports {
+    //        true => Green.paint("true"),
+    //        false => Red.paint("false"),
+    //    };
 
-        let print_esm_partial = match module_support.esm_partial {
-            true => Green.paint("true"),
-            false => Red.paint("false"),
-        };
+    //    let print_esm_partial = match module_support.esm_partial {
+    //        true => Green.paint("true"),
+    //        false => Red.paint("false"),
+    //    };
 
-        let print_esm_main = match module_support.esm_main_mjs {
-            true => Green.paint("true"),
-            false => Red.paint("false"),
-        };
+    //    let print_esm_main = match module_support.esm_main_mjs {
+    //        true => Green.paint("true"),
+    //        false => Red.paint("false"),
+    //    };
 
-        println!(
-            "'type' set to 'module': {}\n'exports' field defined with 'import' prop: {}\n'module' field set: {}\n'main' field references an '.mjs' file: {}",
-            print_esm_type, print_esm_exports, print_esm_partial, print_esm_main
-        );
-    }
-    // println!(
-    //     "CommonJS - 'type' set to 'commonjs': {:?}. 'exports' field defined with 'require' prop: {:?}, by default - no ESM config: {:?}",
-    //     module_support
-    //         .cjs_type,
-    //     module_support.cjs_exports, cjs
-    // )
+    //    println!(
+    //         "'type' set to 'module': {}\n'exports' field defined with 'import' prop: {}\n'module' field set: {}\n'main' field references an '.mjs' file: {}",
+    //         print_esm_type, print_esm_exports, print_esm_partial, print_esm_main
+    //     );
+    //}
 }
 
 // one possible implementation of walking a directory only visiting files
@@ -112,7 +107,6 @@ fn walk_dirs(dir: &PathBuf, cb: &dyn Fn(&DirEntry) -> PackageValidation) -> io::
             package_details: PackageDetails {
                 name: "".to_string(),
                 version: "".to_string(),
-                size: 0,
                 module_support: ModuleSupport {
                     esm_main_mjs: false,
                     esm_type: false,
@@ -121,6 +115,7 @@ fn walk_dirs(dir: &PathBuf, cb: &dyn Fn(&DirEntry) -> PackageValidation) -> io::
                     cjs_type: false,
                     cjs_exports: false,
                 },
+                size: 0,
             },
         };
         let mut package_size: u64 = 0;
@@ -184,14 +179,13 @@ fn parse_exports(exports: &Map<String, Value>) -> ModuleSupport {
         }
     }
 
-    return module_support;
+    module_support
 }
 
 fn parse_package(v: Value) -> PackageDetails {
     let mut package_details = PackageDetails {
         name: "".to_string(),
         version: "".to_string(),
-        size: 0,
         module_support: ModuleSupport {
             esm_main_mjs: false,
             esm_type: false,
@@ -200,6 +194,7 @@ fn parse_package(v: Value) -> PackageDetails {
             cjs_type: false,
             cjs_exports: false,
         },
+        size: 0,
     };
 
     // get the package name
@@ -259,7 +254,7 @@ fn parse_package(v: Value) -> PackageDetails {
         };
     }
 
-    return package_details;
+    package_details
 }
 
 fn dir_handler(entry: &DirEntry) -> PackageValidation {
@@ -270,7 +265,6 @@ fn dir_handler(entry: &DirEntry) -> PackageValidation {
         package_details: PackageDetails {
             name: "".to_string(),
             version: "".to_string(),
-            size: 0,
             module_support: ModuleSupport {
                 esm_main_mjs: false,
                 esm_type: false,
@@ -279,6 +273,7 @@ fn dir_handler(entry: &DirEntry) -> PackageValidation {
                 cjs_type: false,
                 cjs_exports: false,
             },
+            size: 0,
         },
     };
     if file_name == "package.json" {
@@ -292,8 +287,9 @@ fn dir_handler(entry: &DirEntry) -> PackageValidation {
             package_validation.package_details.name =
                 entry.path().parent().unwrap().display().to_string();
         }
+        package_validation.package_details.size = entry.metadata().unwrap().size()
     }
-    return package_validation;
+    package_validation
 }
 
 fn main() {
