@@ -1,0 +1,46 @@
+{
+  "name": "complex-exports-package",
+  "version": "1.0.0",
+  "description": "Package with complex conditional exports",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": {
+        "node": "./dist/node/index.mjs",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "node": "./dist/node/index.cjs",
+        "default": "./dist/index.js"
+      },
+      "browser": {
+        "import": "./dist/browser/index.mjs",
+        "require": "./dist/browser/index.js"
+      }
+    },
+    "./utils": {
+      "types": "./dist/utils/index.d.ts",
+      "import": "./dist/utils/index.mjs",
+      "require": "./dist/utils/index.js"
+    }
+  },
+  "browser": {
+    "./dist/node/index.js": "./dist/browser/index.js"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "lodash": "^4.17.21"
+  },
+  "peerDependencies": {
+    "react": "^17.0.0"
+  },
+  "optionalDependencies": {
+    "fsevents": "^2.3.2"
+  }
+}
