@@ -1,0 +1,12 @@
+{
+  "name": "esm-only-package",
+  "version": "1.0.0",
+  "description": "ESM-only package for testing",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./utils": "./utils.js"
+  },
+  "license": "MIT"
+}

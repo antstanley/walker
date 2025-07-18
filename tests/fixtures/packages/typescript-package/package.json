@@ -1,0 +1,21 @@
+{
+  "name": "typescript-package",
+  "version": "1.0.0",
+  "description": "Package with TypeScript support",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "jest"
+  },
+  "dependencies": {
+    "lodash": "^4.17.21"
+  },
+  "devDependencies": {
+    "typescript": "^4.9.5",
+    "jest": "^29.0.0",
+    "@types/lodash": "^4.14.191"
+  },
+  "license": "MIT"
+}

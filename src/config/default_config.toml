@@ -1,0 +1,60 @@
+# Walker Configuration File
+# This is a default configuration file for Walker, a Node.js package analyzer.
+# Uncomment and modify the settings below as needed.
+
+# Directory to scan for packages (default: current directory)
+# scan_path = "./my-project"
+
+# Patterns for directories to exclude from scanning
+exclude_patterns = [
+    "node_modules",
+    ".git",
+    "target",
+    "dist",
+    "build"
+]
+
+# Maximum directory depth to traverse (optional)
+# max_depth = 10
+
+# Output format: "text", "json", or "csv"
+output_format = "text"
+
+# Output file path (if not specified, output to stdout)
+# output_file = "./walker-results.json"
+
+# Whether to calculate package sizes (set to false for faster scanning)
+calculate_size = true
+
+# Whether to use parallel processing
+parallel = true
+
+# Whether to enable result caching
+cache_enabled = true
+
+# Whether to suppress non-essential output
+quiet = false
+
+# Whether to show detailed progress and debug information
+verbose = false
+
+# Whether to follow symbolic links during directory traversal
+follow_links = false
+
+# Whether to include dev dependencies in analysis
+include_dev_deps = true
+
+# Whether to include peer dependencies in analysis
+include_peer_deps = true
+
+# Whether to include optional dependencies in analysis
+include_optional_deps = true
+
+# Whether to use colors in text output
+use_colors = true
+
+# Cache directory path (optional)
+# cache_dir = "./.walker-cache"
+
+# Whether to show progress bars
+show_progress = true
