@@ -20,7 +20,7 @@ pub trait ResultExt<T, E> {
 
 impl<T, E> ResultExt<T, E> for std::result::Result<T, E>
 where
-    E: std::error::Error + 'static,
+    E: Into<Box<dyn std::error::Error + 'static>>,
 {
     fn with_context<C, F>(self, context: F) -> Result<T>
     where
@@ -28,8 +28,9 @@ where
         C: std::fmt::Display,
     {
         self.map_err(|err| {
+            let err_box = err.into();
             WalkerError::PackageAnalysis {
-                message: format!("{}: {}", context(), err),
+                message: format!("{}: {}", context(), err_box),
                 #[cfg(not(tarpaulin_include))]
                 backtrace: std::backtrace::Backtrace::capture(),
             }
@@ -38,6 +39,7 @@ where
 
     fn with_file_context<P: AsRef<Path>>(self, path: P) -> Result<T> {
         self.map_err(|err| {
+            let err = err.into();
             if let Some(io_err) = err.downcast_ref::<std::io::Error>() {
                 if io_err.kind() == std::io::ErrorKind::PermissionDenied {
                     return WalkerError::PermissionDenied {

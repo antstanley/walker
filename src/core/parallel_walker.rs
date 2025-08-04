@@ -673,14 +673,6 @@ impl ParallelWalker {
         &self.settings
     }
     
-    /// Get any non-critical errors that occurred during directory traversal
-    pub fn errors(&self) -> Vec<(PathBuf, WalkerError)> {
-        if let Ok(errors) = self.errors.lock() {
-            errors.clone()
-        } else {
-            Vec::new()
-        }
-    }
     
     /// Check if a path matches any exclude pattern
     pub fn is_excluded(&self, path: &Path, patterns: &[Pattern]) -> bool {

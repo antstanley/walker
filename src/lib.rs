@@ -3,6 +3,8 @@
 //! This library provides functionality to scan directory structures and analyze
 //! JavaScript/Node.js packages for their ESM/CommonJS module system support.
 
+#![feature(error_generic_member_access)]
+
 pub mod cli;
 pub mod config;
 pub mod core;

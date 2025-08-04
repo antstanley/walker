@@ -1,11 +1,16 @@
+#![feature(error_generic_member_access)]
+
 use std::process;
 use std::time::Instant;
 use walker::{
     cli::{Args, Command},
-    config::{cli::CliConfig, ConfigBuilder, settings::Settings},
+    config::{cli::CliConfig, ConfigBuilder, ConfigSource},
     core::{ParallelWalker, Walker},
-    error::{Result, WalkerError, ErrorSeverity, context::ResultExt},
-    models::analysis::{AnalysisResults, AnalysisError},
+    error::{Result, WalkerError, context::ResultExt},
+    models::{
+        analysis::{AnalysisResults, AnalysisError, ErrorSeverity, PerformanceMetrics, SizePercentiles, DependencyPercentiles},
+        config::Settings,
+    },
     output::{create_formatter, create_progress_callback, create_writer, ProgressReporter},
     VERSION, NAME,
 };
@@ -33,14 +38,17 @@ fn run_command(command: Command) -> i32 {
             eprintln!("\nError: {}", err.user_message());
             
             // Print additional context if available
-            if let Some(context) = err.context() {
-                eprintln!("Context: {}", context);
-            }
+            // TODO: Add context() method to WalkerError
+            // if let Some(context) = err.context() {
+            //     eprintln!("Context: {}", context);
+            // }
             
             // Print suggestion if available
-            if let Some(suggestion) = err.suggestion() {
-                eprintln!("Suggestion: {}", suggestion);
-            } else {
+            // TODO: Add suggestion() method to WalkerError
+            // if let Some(suggestion) = err.suggestion() {
+            //     eprintln!("Suggestion: {}", suggestion);
+            // } else {
+            {
                 // Provide default suggestions based on error type
                 match &err {
                     WalkerError::InvalidPath { .. } => {
@@ -61,16 +69,15 @@ fn run_command(command: Command) -> i32 {
             
             // Print backtrace in verbose mode
             if std::env::var("WALKER_VERBOSE").is_ok() || std::env::var("RUST_BACKTRACE").is_ok() {
-                if let Some(backtrace) = err.backtrace() {
-                    eprintln!("\nBacktrace:\n{}", backtrace);
-                }
+                // Note: Backtrace display is handled by the error display trait
+                eprintln!("\nFor detailed backtrace, set RUST_BACKTRACE=1");
             }
             
             // Return appropriate exit code based on error severity
             let exit_code = match err.severity() {
-                ErrorSeverity::Warning => 0, // Warnings don't cause failure
-                ErrorSeverity::Error => 1,   // Regular errors
-                ErrorSeverity::Critical => 2, // Critical errors
+                walker::error::ErrorSeverity::Warning => 0, // Warnings don't cause failure
+                walker::error::ErrorSeverity::Error => 1,   // Regular errors
+                walker::error::ErrorSeverity::Critical => 2, // Critical errors
             };
             
             // Print a helpful message about exit code if it's non-zero
@@ -98,7 +105,7 @@ fn execute_command(command: Command) -> Result<()> {
             }
             
             // Create the configuration file
-            crate::config::parser::create_default_config(&config_path)?;
+            walker::config::parser::create_default_config(&config_path)?;
             
             println!("Created default configuration file at: {}", config_path.display());
             println!("\nThe configuration file contains default settings that you can customize.");
@@ -211,7 +218,7 @@ fn execute_command(command: Command) -> Result<()> {
                 analysis_results
             } else {
                 // Use regular walker
-                let walker = Walker::new(settings.clone());
+                let mut walker = Walker::new(settings.clone());
                 
                 // Run analysis with progress reporting function and improved error handling
                 if !settings.quiet && settings.show_progress {
@@ -780,8 +787,9 @@ fn format_duration(duration: std::time::Duration) -> String {
     } else {
         format!("{}.{:03}s", secs, millis)
     }
-}/// Gener
-ate and add performance metrics to the analysis results
+}
+
+/// Generate and add performance metrics to the analysis results
 fn generate_performance_metrics(results: &mut AnalysisResults, settings: &Settings, elapsed: std::time::Duration) {
     // Store performance metrics in the summary
     results.summary.performance_metrics = Some(PerformanceMetrics {
@@ -798,6 +806,9 @@ fn generate_performance_metrics(results: &mut AnalysisResults, settings: &Settin
         files_processed: results.summary.files_processed,
         memory_usage: get_memory_usage(),
         timestamp: chrono::Utc::now(),
+        streaming_enabled: settings.stream_results,
+        batch_size: if settings.stream_results { Some(settings.batch_size) } else { None },
+        offloaded_batches: results.offloaded_files.len(),
     });
     
     // Calculate additional statistics
@@ -885,163 +896,39 @@ fn get_memory_usage() -> Option<u64> {
     None
 }
 
-// Using the structs defined in models/analysis.rs///
- Generate and add performance metrics to the analysis results
-fn generate_performance_metrics(results: &mut AnalysisResults, settings: &Settings, elapsed: std::time::Duration) {
-    // Store performance metrics in the summary
-    // Calculate total packages (including those in offloaded files)
-    let total_packages = results.packages.len() + 
-        results.offloaded_files.iter().map(|_| 0).count() * settings.batch_size;
-    
-    results.summary.performance_metrics = Some(models::analysis::PerformanceMetrics {
-        total_duration: elapsed,
-        packages_per_second: if elapsed.as_secs() > 0 {
-            total_packages as f64 / elapsed.as_secs_f64()
-        } else {
-            total_packages as f64 // If less than a second, just report the total
-        },
-        parallel_execution: settings.parallel,
-        cache_enabled: settings.cache_enabled,
-        size_calculation_enabled: settings.calculate_size,
-        directories_scanned: results.summary.directories_scanned,
-        files_processed: results.summary.files_processed,
-        memory_usage: get_memory_usage(),
-        timestamp: chrono::Utc::now(),
-        streaming_enabled: settings.stream_results,
-        batch_size: if settings.stream_results { Some(settings.batch_size) } else { None },
-        offloaded_batches: results.offloaded_files.len(),
-    });
-    
-    // Calculate additional statistics
-    if !results.packages.is_empty() {
-        // Calculate package size distribution
-        if settings.calculate_size {
-            let mut sizes: Vec<u64> = results.packages.iter()
-                .filter_map(|p| p.size)
-                .collect();
-            
-            if !sizes.is_empty() {
-                sizes.sort();
-                
-                let median_size = if sizes.len() % 2 == 0 {
-                    (sizes[sizes.len() / 2 - 1] + sizes[sizes.len() / 2]) / 2
-                } else {
-                    sizes[sizes.len() / 2]
-                };
-                
-                results.summary.median_package_size = median_size;
-                
-                // Calculate size percentiles
-                if sizes.len() >= 10 {
-                    results.summary.size_percentiles = Some(models::analysis::SizePercentiles {
-                        p10: sizes[sizes.len() / 10],
-                        p25: sizes[sizes.len() / 4],
-                        p50: median_size,
-                        p75: sizes[sizes.len() * 3 / 4],
-                        p90: sizes[sizes.len() * 9 / 10],
-                    });
-                }
-            }
-        }
-        
-        // Calculate dependency distribution
-        let mut dep_counts: Vec<usize> = results.packages.iter()
-            .map(|p| p.dependencies.total_count)
-            .collect();
-        
-        if !dep_counts.is_empty() {
-            dep_counts.sort();
-            
-            let median_deps = if dep_counts.len() % 2 == 0 {
-                (dep_counts[dep_counts.len() / 2 - 1] + dep_counts[dep_counts.len() / 2]) / 2
-            } else {
-                dep_counts[dep_counts.len() / 2]
-            };
-            
-            results.summary.median_dependencies = median_deps;
-            
-            // Calculate dependency percentiles
-            if dep_counts.len() >= 10 {
-                results.summary.dependency_percentiles = Some(models::analysis::DependencyPercentiles {
-                    p10: dep_counts[dep_counts.len() / 10],
-                    p25: dep_counts[dep_counts.len() / 4],
-                    p50: median_deps,
-                    p75: dep_counts[dep_counts.len() * 3 / 4],
-                    p90: dep_counts[dep_counts.len() * 9 / 10],
-                });
-            }
-        }
-    }
-}
+// Using the structs defined in models/analysis.rs
 
-/// Get the current memory usage of the process (if available)
-fn get_memory_usage() -> Option<u64> {
-    // This is a simple implementation that works on some platforms
-    // A more robust implementation would use platform-specific APIs
-    #[cfg(target_os = "linux")]
-    {
-        if let Ok(content) = std::fs::read_to_string("/proc/self/status") {
-            for line in content.lines() {
-                if line.starts_with("VmRSS:") {
-                    if let Some(kb_str) = line.split_whitespace().nth(1) {
-                        if let Ok(kb) = kb_str.parse::<u64>() {
-                            return Some(kb * 1024); // Convert KB to bytes
-                        }
-                    }
-                }
-            }
-        }
-    }
-    
-    // For macOS, we could use task_info from the Mach API, but that requires
-    // unsafe code or external crates, so we'll skip it for this implementation
-    #[cfg(target_os = "macos")]
-    {
-        // Placeholder for macOS-specific memory usage implementation
-    }
-    
-    // For Windows, we could use GetProcessMemoryInfo, but that requires
-    // the windows crate or winapi, so we'll skip it for this implementation
-    #[cfg(target_os = "windows")]
-    {
-        // Placeholder for Windows-specific memory usage implementation
-    }
-    
-    // For other platforms or if the above failed
-    None
-}
-
-/// Format a size in bytes to a human-readable string
-fn format_size(size: u64) -> String {
-    if size < 1024 {
-        format!("{}B", size)
-    } else if size < 1024 * 1024 {
-        format!("{:.2}KB", size as f64 / 1024.0)
-    } else if size < 1024 * 1024 * 1024 {
-        format!("{:.2}MB", size as f64 / (1024.0 * 1024.0))
-    } else {
-        format!("{:.2}GB", size as f64 / (1024.0 * 1024.0 * 1024.0))
-    }
-}
-
-/// Format a duration in a human-readable way
-fn format_duration(duration: std::time::Duration) -> String {
-    let total_secs = duration.as_secs();
-    let millis = duration.subsec_millis();
-    
-    if total_secs == 0 {
-        return format!("{}ms", millis);
-    }
-    
-    let hours = total_secs / 3600;
-    let mins = (total_secs % 3600) / 60;
-    let secs = total_secs % 60;
-    
-    if hours > 0 {
-        format!("{}h {}m {}s", hours, mins, secs)
-    } else if mins > 0 {
-        format!("{}m {}s", mins, secs)
-    } else {
-        format!("{}.{:03}s", secs, millis)
-    }
-}
+// /// Format a size in bytes to a human-readable string
+// fn format_size(size: u64) -> String {
+//     if size < 1024 {
+//         format!("{}B", size)
+//     } else if size < 1024 * 1024 {
+//         format!("{:.2}KB", size as f64 / 1024.0)
+//     } else if size < 1024 * 1024 * 1024 {
+//         format!("{:.2}MB", size as f64 / (1024.0 * 1024.0))
+//     } else {
+//         format!("{:.2}GB", size as f64 / (1024.0 * 1024.0 * 1024.0))
+//     }
+// }
+// 
+// /// Format a duration in a human-readable way
+// fn format_duration(duration: std::time::Duration) -> String {
+//     let total_secs = duration.as_secs();
+//     let millis = duration.subsec_millis();
+//     
+//     if total_secs == 0 {
+//         return format!("{}ms", millis);
+//     }
+//     
+//     let hours = total_secs / 3600;
+//     let mins = (total_secs % 3600) / 60;
+//     let secs = total_secs % 60;
+//     
+//     if hours > 0 {
+//         format!("{}h {}m {}s", hours, mins, secs)
+//     } else if mins > 0 {
+//         format!("{}m {}s", mins, secs)
+//     } else {
+//         format!("{}.{:03}s", secs, millis)
+//     }
+// }

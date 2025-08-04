@@ -36,7 +36,7 @@ impl Walker {
     }
 
     /// Analyze packages in the configured directory
-    pub fn analyze(&self) -> Result<AnalysisResults> {
+    pub fn analyze(&mut self) -> Result<AnalysisResults> {
         let start_time = Instant::now();
         let mut results = AnalysisResults::new();
         
@@ -123,7 +123,7 @@ impl Walker {
     }
     
     /// Find all directories containing package.json files
-    fn find_package_dirs(&self, exclude_patterns: &[Pattern]) -> Result<Vec<PathBuf>> {
+    fn find_package_dirs(&mut self, exclude_patterns: &[Pattern]) -> Result<Vec<PathBuf>> {
         let mut result = Vec::new();
         let mut walker = Walker {
             settings: self.settings.clone(),
@@ -285,7 +285,7 @@ impl Walker {
     }
     
     /// Analyze with progress reporting
-    pub fn analyze_with_progress<F>(&self, progress_fn: F) -> Result<AnalysisResults>
+    pub fn analyze_with_progress<F>(&mut self, progress_fn: F) -> Result<AnalysisResults>
     where
         F: Fn(usize, usize, &str),
     {

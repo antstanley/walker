@@ -35,13 +35,11 @@ impl PackageJsonParser {
         };
 
         // Extract required fields
-        let name = Self::extract_string_field(&obj, "name")?;
-        let version = Self::extract_string_field(&obj, "version")?;
+        // let name = Self::extract_string_field(&obj, "name")?;
+        // let version = Self::extract_string_field(&obj, "version")?;
 
         // Create package details with required fields
         let mut details = PackageDetails {
-            name,
-            version,
             ..Default::default()
         };
 
@@ -105,7 +103,7 @@ impl PackageJsonParser {
     pub fn parse_file(path: &Path) -> Result<PackageDetails> {
         let content = std::fs::read_to_string(path)
             .map_err(|e| WalkerError::io_error(e))?;
-        
+
         Self::parse(&content).map_err(|e| match e {
             WalkerError::JsonParse { source, .. } => WalkerError::JsonParse {
                 file: path.to_path_buf(),
@@ -126,46 +124,46 @@ impl PackageJsonParser {
     /// Extract dependency information from package details
     pub fn extract_dependency_info(details: &PackageDetails) -> DependencyInfo {
         let mut info = DependencyInfo::default();
-        
+
         // Process production dependencies
         if let Some(deps) = &details.dependencies {
             let entries = Self::extract_dependencies(deps);
             info.production_count = entries.len();
             info.production_deps = Some(entries);
         }
-        
+
         // Process development dependencies
         if let Some(deps) = &details.dev_dependencies {
             let entries = Self::extract_dependencies(deps);
             info.development_count = entries.len();
             info.dev_deps = Some(entries);
         }
-        
+
         // Process peer dependencies
         if let Some(deps) = &details.peer_dependencies {
             let entries = Self::extract_dependencies(deps);
             info.peer_count = entries.len();
             info.peer_deps = Some(entries);
         }
-        
+
         // Process optional dependencies
         if let Some(deps) = &details.optional_dependencies {
             let entries = Self::extract_dependencies(deps);
             info.optional_count = entries.len();
             info.optional_deps = Some(entries);
         }
-        
+
         // Calculate total count
-        info.total_count = info.production_count + info.development_count + 
+        info.total_count = info.production_count + info.development_count +
                           info.peer_count + info.optional_count;
-        
+
         info
     }
 
     /// Extract dependencies from a JSON value
     fn extract_dependencies(deps_json: &Value) -> Vec<DependencyEntry> {
         let mut entries = Vec::new();
-        
+
         if let Value::Object(map) = deps_json {
             for (name, version) in map {
                 if let Some(version_str) = version.as_str() {
@@ -176,7 +174,7 @@ impl PackageJsonParser {
                 }
             }
         }
-        
+
         entries
     }
 
@@ -229,7 +227,7 @@ impl PackageJsonParser {
                         }
                     })
                     .collect();
-                
+
                 if strings.is_empty() {
                     None
                 } else {

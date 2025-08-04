@@ -100,7 +100,7 @@ pub enum WalkerError {
         #[cfg(not(tarpaulin_include))]
         backtrace: std::backtrace::Backtrace,
     },
-    
+
     /// Configuration file not found
     #[error("Configuration file not found at {path}")]
     ConfigNotFound {
@@ -108,27 +108,27 @@ pub enum WalkerError {
         #[cfg(not(tarpaulin_include))]
         backtrace: std::backtrace::Backtrace,
     },
-    
+
     /// Configuration file read errors
     #[error("Error reading configuration file {path}: {source}")]
-    ConfigRead { 
+    ConfigRead {
         path: PathBuf,
         #[source]
         source: std::io::Error,
         #[cfg(not(tarpaulin_include))]
         backtrace: std::backtrace::Backtrace,
     },
-    
+
     /// Configuration file parse errors
     #[error("Error parsing configuration file {path}: {source}")]
-    ConfigParse { 
+    ConfigParse {
         path: PathBuf,
         #[source]
         source: toml::de::Error,
         #[cfg(not(tarpaulin_include))]
         backtrace: std::backtrace::Backtrace,
     },
-    
+
     /// Invalid output format
     #[error("Invalid output format: {format}")]
     InvalidOutputFormat {
@@ -136,26 +136,26 @@ pub enum WalkerError {
         #[cfg(not(tarpaulin_include))]
         backtrace: std::backtrace::Backtrace,
     },
-    
+
     /// Output file write errors
     #[error("Error writing to output file {path}: {source}")]
-    OutputWrite { 
+    OutputWrite {
         path: PathBuf,
         #[source]
         source: std::io::Error,
         #[cfg(not(tarpaulin_include))]
         backtrace: std::backtrace::Backtrace,
     },
-    
+
     /// Stdout write errors
     #[error("Error writing to stdout: {source}")]
-    StdoutWrite { 
+    StdoutWrite {
         #[source]
         source: std::io::Error,
         #[cfg(not(tarpaulin_include))]
         backtrace: std::backtrace::Backtrace,
     },
-    
+
     /// Package analysis errors
     #[error("Package analysis error: {message}")]
     PackageAnalysis {
@@ -220,7 +220,7 @@ pub enum WalkerError {
         #[cfg(not(tarpaulin_include))]
         backtrace: std::backtrace::Backtrace,
     },
-    
+
     /// JSON serialization error
     #[error("JSON serialization error: {source}")]
     JsonSerialize {
@@ -229,7 +229,7 @@ pub enum WalkerError {
         #[cfg(not(tarpaulin_include))]
         backtrace: std::backtrace::Backtrace,
     },
-    
+
     /// CSV serialization error
     #[error("CSV serialization error: {source}")]
     CsvSerialize {
@@ -238,7 +238,7 @@ pub enum WalkerError {
         #[cfg(not(tarpaulin_include))]
         backtrace: std::backtrace::Backtrace,
     },
-    
+
     /// Output directory not found
     #[error("Output directory not found: {path}")]
     OutputDirectoryNotFound {
@@ -257,7 +257,7 @@ impl WalkerError {
             WalkerError::JsonParse { .. } => ErrorSeverity::Warning,
             WalkerError::PackageJsonNotFound { .. } => ErrorSeverity::Warning,
             WalkerError::InvalidPackageJson { .. } => ErrorSeverity::Warning,
-            
+
             // Critical errors - process should terminate
             WalkerError::Config { .. } => ErrorSeverity::Critical,
             WalkerError::ConfigNotFound { .. } => ErrorSeverity::Critical,
@@ -266,7 +266,7 @@ impl WalkerError {
             WalkerError::InvalidOutputFormat { .. } => ErrorSeverity::Critical,
             WalkerError::StdoutWrite { .. } => ErrorSeverity::Critical,
             WalkerError::OutputDirectoryNotFound { .. } => ErrorSeverity::Critical,
-            
+
             // Regular errors - current operation fails but overall process can continue
             _ => ErrorSeverity::Error,
         }
@@ -399,6 +399,16 @@ impl From<csv::Error> for WalkerError {
 impl From<glob::PatternError> for WalkerError {
     fn from(err: glob::PatternError) -> Self {
         WalkerError::GlobPattern {
+            source: err,
+            #[cfg(not(tarpaulin_include))]
+            backtrace: std::backtrace::Backtrace::capture(),
+        }
+    }
+}
+
+impl From<serde_json::Error> for WalkerError {
+    fn from(err: serde_json::Error) -> Self {
+        WalkerError::JsonSerialize {
             source: err,
             #[cfg(not(tarpaulin_include))]
             backtrace: std::backtrace::Backtrace::capture(),
