@@ -177,6 +177,22 @@ pub struct Args {
     /// Initialize a default configuration file
     #[arg(long, help = "Create a default configuration file (.walker.toml) in the current directory")]
     pub init: bool,
+
+    /// Enable AST-based analysis for dependency graphs and dead code detection
+    #[arg(long, help = "Enable AST-based analysis to build dependency graphs and detect dead code (slower but more accurate)")]
+    pub ast_analysis: bool,
+
+    /// Follow dynamic imports in AST analysis
+    #[arg(long, help = "Include dynamic imports when building dependency graphs (requires --ast-analysis)")]
+    pub follow_dynamic_imports: bool,
+
+    /// Include node_modules in AST analysis
+    #[arg(long, help = "Include node_modules packages in dependency graph analysis (requires --ast-analysis, may be slow)")]
+    pub include_node_modules_ast: bool,
+
+    /// Output dependency graph in DOT format
+    #[arg(long, value_name = "FILE", help = "Export dependency graph to DOT format file for visualization (requires --ast-analysis)")]
+    pub dependency_graph_output: Option<PathBuf>,
 }
 
 /// Output format options

@@ -12,6 +12,7 @@ pub mod error;
 pub mod models;
 pub mod output;
 pub mod parsers;
+pub mod utils;
 
 // Re-export commonly used types
 pub use error::{

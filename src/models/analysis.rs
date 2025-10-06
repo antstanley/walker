@@ -207,6 +207,44 @@ impl AnalysisResults {
     pub fn has_critical_errors(&self) -> bool {
         self.errors.iter().any(|e| matches!(e.severity, ErrorSeverity::Critical))
     }
+
+    /// Finalize the results (calculate summary statistics)
+    pub fn finalize(&mut self) {
+        // Update summary statistics
+        self.summary.total_packages = self.packages.len();
+
+        // Count module support types
+        for package in &self.packages {
+            if package.module_support.is_dual_mode() {
+                self.summary.dual_mode += 1;
+                self.summary.esm_supported += 1;
+                self.summary.cjs_supported += 1;
+            } else if package.module_support.is_esm_only() {
+                self.summary.esm_only += 1;
+                self.summary.esm_supported += 1;
+            } else if package.module_support.is_cjs_only() {
+                self.summary.cjs_only += 1;
+                self.summary.cjs_supported += 1;
+            }
+
+            if package.typescript_support {
+                self.summary.typescript_supported += 1;
+            }
+
+            if package.browser_support {
+                self.summary.browser_supported += 1;
+            }
+        }
+
+        // Update error counts
+        self.summary.errors_encountered = self.errors.len();
+        self.summary.warnings_count = self.errors.iter()
+            .filter(|e| matches!(e.severity, ErrorSeverity::Warning))
+            .count();
+        self.summary.critical_errors_count = self.errors.iter()
+            .filter(|e| matches!(e.severity, ErrorSeverity::Critical))
+            .count();
+    }
 }
 
 /// Summary statistics from analysis

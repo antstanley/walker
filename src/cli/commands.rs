@@ -78,8 +78,28 @@ impl Command {
                     }
                 }
 
+                // Check if AST analysis is enabled
+                let use_ast = args.ast_analysis;
+
                 // Execute the analysis
                 if settings.parallel {
+                    // Create analyzer with or without AST support
+                    let analyzer = if use_ast {
+                        let ast_config = crate::core::ast_walker::ASTWalkerConfig {
+                            follow_dynamic_imports: args.follow_dynamic_imports,
+                            include_node_modules: args.include_node_modules_ast,
+                            max_depth: 100,
+                            ignore_patterns: settings.exclude_patterns.clone(),
+                        };
+                        crate::core::Analyzer::with_ast_analysis(
+                            settings.cache_enabled,
+                            settings.calculate_size,
+                            ast_config,
+                        )
+                    } else {
+                        crate::core::Analyzer::new(settings.cache_enabled, settings.calculate_size)
+                    };
+
                     // Use parallel walker with progress reporting
                     let walker = crate::core::ParallelWalker::new(settings.clone());
 
@@ -97,7 +117,42 @@ impl Command {
                     }
 
                     // Run analysis with progress reporting
-                    let results = walker.analyze_with_progress(progress_callback)?;
+                    let results = if use_ast {
+                        // Use AST-based analysis
+                        let packages = walker.find_packages()?;
+                        let ast_results = analyzer.analyze_packages_with_ast::<fn(usize, usize, &str)>(&packages, None)?;
+
+                        // Export dependency graphs if requested
+                        if let Some(dot_path) = &args.dependency_graph_output {
+                            for (path, result) in &ast_results {
+                                if let Ok((_, Some(ast))) = result {
+                                    if !ast.dependency_graph.nodes.is_empty() {
+                                        let dot = ast.dependency_graph.to_dot();
+                                        let output_file = if ast_results.len() > 1 {
+                                            // Multiple packages - add package name to filename
+                                            let package_name = path.file_name()
+                                                .unwrap_or_else(|| std::ffi::OsStr::new("unknown"))
+                                                .to_string_lossy();
+                                            dot_path.with_file_name(format!("{}_{}.dot",
+                                                dot_path.file_stem().unwrap_or_default().to_string_lossy(),
+                                                package_name))
+                                        } else {
+                                            dot_path.clone()
+                                        };
+                                        std::fs::write(&output_file, dot)?;
+                                        if !settings.quiet {
+                                            println!("Dependency graph written to: {}", output_file.display());
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Convert to standard results format
+                        walker.convert_ast_results_to_analysis_results(ast_results)?
+                    } else {
+                        walker.analyze_with_progress(progress_callback)?
+                    };
 
                     // Finish the progress reporter
                     if !settings.quiet && settings.show_progress {

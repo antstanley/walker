@@ -155,9 +155,9 @@ impl ModuleSupport {
     /// Create a new ModuleSupport instance from package details
     pub fn from_package_details(details: &PackageDetails) -> Self {
         use crate::parsers::ExportsParser;
-        
+
         let mut support = Self::default();
-        
+
         // Check ESM support
         if let Some(pkg_type) = &details.package_type {
             if pkg_type == "module" {
@@ -166,12 +166,12 @@ impl ModuleSupport {
                 support.cjs.type_commonjs = true;
             }
         }
-        
+
         // Check module field for ESM
         if details.module.is_some() {
             support.esm.module_field = true;
         }
-        
+
         // Check main field for .mjs extension
         if let Some(main) = &details.main {
             if main.ends_with(".mjs") {
@@ -180,34 +180,34 @@ impl ModuleSupport {
                 support.cjs.exports_require = true;
             }
         }
-        
+
         // Check exports field for ESM/CJS/TypeScript/Browser support using the ExportsParser
         if let Some(exports) = &details.exports {
             // Use the ExportsParser's comprehensive analysis
             let (has_esm, has_cjs, has_typescript, has_browser) = ExportsParser::analyze_exports(exports);
-            
+
             support.esm.exports_import = has_esm;
             support.cjs.exports_require = has_cjs;
             support.typescript.exports_dts = has_typescript;
             support.browser.exports_browser = has_browser;
         }
-        
+
         // Set default CJS support (most packages support CJS by default unless explicitly ESM-only)
         support.cjs.default_support = !support.esm.type_module;
-        
+
         // Check TypeScript support via dedicated fields
         if details.types.is_some() {
             support.typescript.types_field = true;
         }
-        
+
         if details.typings.is_some() {
             support.typescript.typings_field = true;
         }
-        
+
         // Check browser support via browser field
         if details.browser.is_some() {
             support.browser.browser_field = true;
-            
+
             // Analyze browser field for more detailed browser support info
             if let Some(browser) = &details.browser {
                 match browser {
@@ -232,52 +232,52 @@ impl ModuleSupport {
                 }
             }
         }
-        
+
         // Calculate overall support flags
-        support.esm.overall = support.esm.type_module || 
-                             support.esm.exports_import || 
-                             support.esm.module_field || 
+        support.esm.overall = support.esm.type_module ||
+                             support.esm.exports_import ||
+                             support.esm.module_field ||
                              support.esm.main_mjs;
-        
-        support.cjs.overall = support.cjs.type_commonjs || 
-                             support.cjs.exports_require || 
+
+        support.cjs.overall = support.cjs.type_commonjs ||
+                             support.cjs.exports_require ||
                              support.cjs.default_support;
-        
-        support.typescript.overall = support.typescript.types_field || 
-                                    support.typescript.typings_field || 
+
+        support.typescript.overall = support.typescript.types_field ||
+                                    support.typescript.typings_field ||
                                     support.typescript.exports_dts;
-        
-        support.browser.overall = support.browser.browser_field || 
+
+        support.browser.overall = support.browser.browser_field ||
                                  support.browser.exports_browser;
-        
+
         support
     }
-    
+
     /// Check if the package is dual-mode (supports both ESM and CJS)
     pub fn is_dual_mode(&self) -> bool {
         self.esm.overall && self.cjs.overall
     }
-    
+
     /// Check if the package is ESM-only
     pub fn is_esm_only(&self) -> bool {
         self.esm.overall && !self.cjs.overall
     }
-    
+
     /// Check if the package is CJS-only
     pub fn is_cjs_only(&self) -> bool {
         !self.esm.overall && self.cjs.overall
     }
-    
+
     /// Check if the package has no module system support detected
     pub fn has_no_support(&self) -> bool {
         !self.esm.overall && !self.cjs.overall
     }
-    
+
     /// Check if the package has TypeScript support
     pub fn has_typescript_support(&self) -> bool {
         self.typescript.overall
     }
-    
+
     /// Check if the package has browser support
     pub fn has_browser_support(&self) -> bool {
         self.browser.overall
@@ -405,31 +405,31 @@ impl DependencyInfo {
     /// Create a new DependencyInfo instance from package details
     pub fn from_package_details(details: &PackageDetails) -> Self {
         use crate::parsers::PackageJsonParser;
-        
+
         // Use the PackageJsonParser to extract dependency information
         PackageJsonParser::extract_dependency_info(details)
     }
-    
+
     /// Get the list of all dependency names
     pub fn all_dependency_names(&self) -> Vec<String> {
         let mut names = Vec::new();
-        
+
         if let Some(deps) = &self.production_deps {
             names.extend(deps.iter().map(|d| d.name.clone()));
         }
-        
+
         if let Some(deps) = &self.dev_deps {
             names.extend(deps.iter().map(|d| d.name.clone()));
         }
-        
+
         if let Some(deps) = &self.peer_deps {
             names.extend(deps.iter().map(|d| d.name.clone()));
         }
-        
+
         if let Some(deps) = &self.optional_deps {
             names.extend(deps.iter().map(|d| d.name.clone()));
         }
-        
+
         names
     }
 }

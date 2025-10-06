@@ -3,9 +3,10 @@
 //! This module provides comprehensive package analysis with caching support,
 //! extracting detailed information from package.json files.
 
+use crate::core::ast_walker::{ASTWalker, ASTWalkerConfig};
 use crate::core::cache::{ThreadSafeCache};
 use crate::error::{Result, WalkerError};
-use crate::models::{analysis::PackageAnalysis, package::PackageDetails};
+use crate::models::{analysis::PackageAnalysis, ast::ASTAnalysisResults, package::PackageDetails};
 use crate::parsers::{package_json::PackageJsonParser};
 use std::collections::HashMap;
 use std::fs;
@@ -16,6 +17,7 @@ use std::sync::Arc;
 pub struct Analyzer {
     cache: Option<Arc<ThreadSafeCache>>,
     calculate_size: bool,
+    ast_walker: Option<ASTWalker>,
 }
 
 impl Analyzer {
@@ -30,6 +32,26 @@ impl Analyzer {
         Self {
             cache,
             calculate_size,
+            ast_walker: None,
+        }
+    }
+
+    /// Create a new analyzer with AST analysis enabled
+    pub fn with_ast_analysis(
+        cache_enabled: bool,
+        calculate_size: bool,
+        ast_config: ASTWalkerConfig,
+    ) -> Self {
+        let cache = if cache_enabled {
+            Some(Arc::new(ThreadSafeCache::new()))
+        } else {
+            None
+        };
+
+        Self {
+            cache,
+            calculate_size,
+            ast_walker: Some(ASTWalker::new(ast_config)),
         }
     }
 
@@ -229,5 +251,51 @@ impl Analyzer {
         } else {
             Ok((0, 0, 0))
         }
+    }
+
+    /// Analyze a package with AST-based dependency analysis
+    pub fn analyze_with_ast(&self, path: &Path) -> Result<(PackageAnalysis, Option<ASTAnalysisResults>)> {
+        // First perform standard package analysis
+        let package_analysis = self.analyze_package_with_options(path)?;
+
+        // If AST walker is configured, perform AST analysis
+        let ast_results = if let Some(ref walker) = self.ast_walker {
+            Some(walker.analyze_package(path)?)
+        } else {
+            None
+        };
+
+        Ok((package_analysis, ast_results))
+    }
+
+    /// Analyze multiple packages with AST analysis
+    pub fn analyze_packages_with_ast<F>(
+        &self,
+        paths: &[PathBuf],
+        progress_fn: Option<F>,
+    ) -> Result<HashMap<PathBuf, Result<(PackageAnalysis, Option<ASTAnalysisResults>)>>>
+    where
+        F: Fn(usize, usize, &str),
+    {
+        let mut results = HashMap::new();
+        let total = paths.len();
+
+        for (i, path) in paths.iter().enumerate() {
+            // Report progress if a progress function is provided
+            if let Some(ref progress) = progress_fn {
+                progress(i, total, &format!("Analyzing package: {}", path.display()));
+            }
+
+            // Analyze the package with AST analysis if enabled
+            let result = self.analyze_with_ast(path);
+            results.insert(path.clone(), result);
+        }
+
+        // Report completion if a progress function is provided
+        if let Some(ref progress) = progress_fn {
+            progress(total, total, "Analysis complete");
+        }
+
+        Ok(results)
     }
 }

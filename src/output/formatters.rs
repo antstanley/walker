@@ -4,9 +4,8 @@
 
 use crate::error::{Result, WalkerError};
 use crate::models::analysis::{AnalysisResults, PackageAnalysis, ErrorSeverity};
-use ansi_term::Colour::{Red, Green, Yellow, Blue, Cyan, Purple};
+use ansi_term::Colour::{Red, Green, Yellow, Blue};
 use ansi_term::Style;
-use std::io::Write;
 use serde_json;
 use csv;
 

@@ -40,6 +40,16 @@ pub enum WalkerError {
         backtrace: std::backtrace::Backtrace,
     },
 
+    /// IO Read errors
+    #[error("IO Read error {path}: {source}")]
+    IoRead {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+        #[cfg(not(tarpaulin_include))]
+        backtrace: std::backtrace::Backtrace,
+    },
+
     /// JSON parsing errors with file context
     #[error("JSON parsing error in {file}: {source}")]
     JsonParse {

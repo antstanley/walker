@@ -684,4 +684,83 @@ impl ParallelWalker {
         }
         false
     }
+
+    /// Find all packages without analyzing them (used for AST analysis)
+    pub fn find_packages(&self) -> Result<Vec<PathBuf>> {
+        // Check if the scan path exists
+        if !self.settings.scan_path.exists() {
+            return Err(WalkerError::InvalidPath {
+                path: self.settings.scan_path.clone(),
+                #[cfg(not(tarpaulin_include))]
+                backtrace: std::backtrace::Backtrace::capture(),
+            });
+        }
+
+        // Compile exclude patterns
+        let exclude_patterns = self.compile_exclude_patterns()?;
+
+        // Find all package.json files in parallel
+        self.find_package_dirs_parallel(&exclude_patterns)
+    }
+
+    /// Convert AST analysis results to standard AnalysisResults format
+    pub fn convert_ast_results_to_analysis_results(
+        &self,
+        ast_results: std::collections::HashMap<
+            PathBuf,
+            Result<(crate::models::analysis::PackageAnalysis, Option<crate::models::ast::ASTAnalysisResults>)>
+        >,
+    ) -> Result<AnalysisResults> {
+        let mut results = AnalysisResults::new();
+
+        for (path, result) in ast_results {
+            match result {
+                Ok((package_analysis, ast_analysis)) => {
+                    // Add package analysis
+                    results.add_package(package_analysis);
+
+                    // If we have AST analysis, add additional information
+                    if let Some(ast) = ast_analysis {
+                        // Report dead code
+                        if !ast.dependency_graph.unreachable_files.is_empty() {
+                            if !self.settings.quiet {
+                                println!("\nDead code found in {}:", path.display());
+                                for file in &ast.dependency_graph.unreachable_files {
+                                    println!("  - {}", file.display());
+                                }
+                            }
+                        }
+
+                        // Report circular dependencies
+                        if !ast.dependency_graph.circular_dependencies.is_empty() {
+                            if !self.settings.quiet {
+                                println!("\nCircular dependencies found in {}:", path.display());
+                                for (from, to) in &ast.dependency_graph.circular_dependencies {
+                                    println!("  {} -> {}", from.display(), to.display());
+                                }
+                            }
+                        }
+
+                        // Report unresolved imports
+                        if !ast.dependency_graph.unresolved_imports.is_empty() {
+                            if self.settings.verbose {
+                                println!("\nUnresolved imports in {}:", path.display());
+                                for (file, imports) in &ast.dependency_graph.unresolved_imports {
+                                    for import in imports {
+                                        println!("  {} -> {}", file.display(), import);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(err) => {
+                    results.add_error(path, &err);
+                }
+            }
+        }
+
+        results.finalize();
+        Ok(results)
+    }
 }

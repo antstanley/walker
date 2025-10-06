@@ -7,24 +7,43 @@ edition = "2021"
 
 [dependencies]
 # Existing dependencies
-serde_json = "1.0.113"
-ansi_term = "0.12"
+serde_json = "1.0.145"
+ansi_term = "0.12.1"
 
 # New dependencies for enhanced functionality
-clap = { version = "4.0", features = ["derive"] }
-serde = { version = "1.0", features = ["derive"] }
-toml = "0.9.4"
-thiserror = "2"
-rayon = "1.7"
-indicatif = "0.18"
-walkdir = "2.3"
-glob = "0.3"
-csv = "1.2"
-chrono = { version = "0.4", features = ["serde"] }
-dirs = "5.0"
+clap = { version = "4.5.48", features = ["derive"] }
+serde = { version = "1.0.228", features = ["derive"] }
+toml = "0.9.7"
+thiserror = "2.0.17"
+rayon = "1.11.0"
+indicatif = "0.18.0"
+walkdir = "2.5.0"
+glob = "0.3.3"
+csv = "1.3.1"
+chrono = { version = "0.4.42", features = ["serde"] }
+dirs = "6.0.0"
+
+# OXC Parser dependencies
+oxc_parser = "0.93.0"
+oxc_ast = "0.93.0"
+oxc_allocator = "0.93.0"
+oxc_span = "0.93.0"
+oxc_syntax = "0.93.0"
+oxc_diagnostics = "0.93.0"
+
+# Performance & concurrency
+dashmap = "6.1.0"
+parking_lot = "0.12.5"
+num_cpus = "1.17.0"
+
+# Graph algorithms
+petgraph = "0.8.3"
+
+# Caching
+lru = "0.16.1"
 
 [dev-dependencies]
-tempfile = "3.8"
+tempfile = "3.23.0"
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(tarpaulin_include)'] }
