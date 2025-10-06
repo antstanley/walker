@@ -74,6 +74,28 @@ cargo tarpaulin --out html
 
 Walker is a Rust CLI application that analyzes Node.js packages in directory structures. The codebase follows a modular architecture with clear separation of concerns.
 
+### Dependencies
+
+Walker uses the following key dependencies:
+
+**Core Parsing**:
+- `oxc_parser` v0.93.0 - High-performance JavaScript/TypeScript parser
+- `oxc_ast` v0.93.0 - Abstract syntax tree definitions
+- `oxc_allocator` v0.93.0 - Arena allocator for AST nodes
+- `oxc_span` v0.93.0 - Source code span tracking
+- `oxc_syntax` v0.93.0 - Syntax definitions and utilities
+- `oxc_diagnostics` v0.93.0 - Error diagnostics
+
+**Concurrency & Performance**:
+- `rayon` v1.11.0 - Data parallelism
+- `dashmap` v6.1.0 - Concurrent hash map
+- `parking_lot` v0.12.5 - Efficient synchronization primitives
+- `num_cpus` v1.17.0 - CPU core detection
+
+**Other**:
+- `petgraph` v0.8.3 - Dependency graph algorithms
+- `lru` v0.16.1 - LRU caching
+
 ### Core Components
 
 1. **CLI Layer** (`src/cli/`)
@@ -105,6 +127,8 @@ Walker is a Rust CLI application that analyzes Node.js packages in directory str
    - `package.rs`: Core data structures (ModuleSupport, PackageDetails, DependencyCounts)
    - `analysis.rs`: AnalysisResults, AnalysisSummary, ErrorTracking, PerformanceMetrics
    - `config.rs`: Configuration-related models and OutputFormat enum
+   - `file_metadata.rs`: File-level AST analysis data (FileMetadata, ModuleSystem, ExportedSymbol, ImportedSymbol)
+   - `ast.rs`: AST analysis results and dependency graph structures
 
 6. **Output** (`src/output/`)
    - `formatters.rs`: Trait-based formatters (TextFormatter, JsonFormatter, CsvFormatter)
@@ -114,6 +138,9 @@ Walker is a Rust CLI application that analyzes Node.js packages in directory str
 7. **Parsers** (`src/parsers/`)
    - `package_json.rs`: Comprehensive package.json parsing with serde_json
    - `exports.rs`: Module exports and conditional exports detection
+   - `ast_parser.rs`: OXC-based AST parser with allocator pooling for thread safety
+   - `module_detector.rs`: AST visitor pattern for detecting module system usage
+   - `dependency_graph_builder.rs`: Build dependency graphs from parsed AST
 
 ### Key Design Patterns
 
@@ -123,26 +150,62 @@ Walker is a Rust CLI application that analyzes Node.js packages in directory str
 - **Strategy Pattern**: Formatter trait for pluggable output formats
 - **Observer Pattern**: Progress callbacks for non-blocking UI updates
 - **Resource Management**: RAII with Drop traits for cleanup
+- **Visitor Pattern**: AST traversal in `module_detector.rs` for detecting module patterns
+- **Object Pool Pattern**: Allocator pooling in `ast_parser.rs` for memory efficiency
 
 ### Module System Detection Logic
 
-The analyzer (`src/core/analyzer.rs`) determines module support through:
+The analyzer (`src/core/analyzer.rs`) determines module support through two layers:
 
-**ESM Detection**:
-- `"type": "module"` in package.json
-- Presence of `.mjs` files in package directory
+**1. Package.json-based Detection** (fast, static analysis):
+- `"type": "module"` in package.json indicates ESM
+- Presence of `.mjs` files indicates ESM
 - `"exports"` field with ESM-specific conditions
 - `"module"` field pointing to ESM entry
+- Presence of `.cjs` files indicates CommonJS
+- `"main"` field without ESM indicators indicates CommonJS
+- Conditional exports supporting both `"import"` and `"require"` indicates dual mode
 
-**CommonJS Detection**:
-- Default when no `"type": "module"` is present
-- Presence of `.cjs` files
-- `"main"` field without ESM indicators
-- `require()` usage patterns in exports
+**2. AST-based Detection** (deep, syntax-aware analysis using OXC):
 
-**Dual Mode Detection**:
-- Both ESM and CommonJS indicators present
-- Conditional exports supporting both `"import"` and `"require"`
+Walker integrates the **OXC Parser** (oxc_parser, oxc_ast, oxc_allocator) for high-performance JavaScript/TypeScript AST analysis.
+
+**OXC Integration Architecture**:
+- `ast_parser.rs`: Main parser wrapper with thread-safe allocator pooling
+  - Uses `oxc_allocator::Allocator` with pooling to avoid allocation overhead
+  - Supports all JavaScript/TypeScript file types via `oxc_span::SourceType`
+  - Processes AST immediately to avoid lifetime issues
+  - Returns ownership-friendly `FileAnalysis` with extracted data
+
+- `module_detector.rs`: AST visitor for module system detection
+  - Implements visitor pattern to traverse `oxc_ast` nodes
+  - Detects ESM syntax: `import`/`export` statements, dynamic `import()`
+  - Detects CommonJS syntax: `require()` calls, `module.exports`, `exports.xxx`
+  - Extracts imported/exported symbols with line numbers
+  - Tracks circular dependencies
+
+**AST-based ESM Detection**:
+- `import` declarations (static imports)
+- `export` named/default/all declarations
+- Dynamic `import()` expressions
+- Identifies imported/exported symbols and their types (function, class, variable)
+
+**AST-based CommonJS Detection**:
+- `require()` function calls with module paths
+- `module.exports` assignments
+- `exports.xxx` property assignments
+- Detects mixed usage patterns
+
+**Mixed/Dual Mode Detection**:
+- Both ESM and CommonJS syntax present in same file
+- Conditional exports supporting multiple formats
+- Separate import/require entry points
+
+**Performance Optimizations**:
+- Allocator pooling reduces GC pressure during parallel parsing
+- Parse results extracted immediately to avoid AST lifetime constraints
+- Thread-safe via `parking_lot::RwLock` for concurrent access
+- Graceful error handling for invalid syntax
 
 ### Performance Considerations
 
@@ -151,6 +214,11 @@ The analyzer (`src/core/analyzer.rs`) determines module support through:
 - **Size Calculation**: Optional via `--no-size` flag (major performance boost)
 - **Progress Reporting**: Separate thread to avoid blocking analysis
 - **Memory Efficiency**: Streaming mode for directories with >10,000 packages
+- **AST Parsing Optimization**:
+  - Allocator pooling (size = number of CPU cores) for reduced allocations
+  - Immediate AST processing to avoid lifetime/borrowing overhead
+  - Thread-safe concurrent parsing via parking_lot synchronization primitives
+  - OXC parser is among the fastest JavaScript parsers available
 
 ### Testing Structure
 
