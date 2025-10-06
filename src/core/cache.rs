@@ -7,7 +7,7 @@ use crate::error::{Result, WalkerError};
 use crate::models::analysis::PackageAnalysis;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{RwLock};
 use std::time::{Duration, Instant};
 
 /// Cache for storing analysis results
@@ -60,7 +60,7 @@ impl Cache {
                         return None;
                     }
                 }
-                
+
                 // Return a clone of the cached analysis
                 Some(entry.analysis.clone())
             }
@@ -74,13 +74,13 @@ impl Cache {
         if self.cache.len() >= self.max_size {
             self.evict_oldest();
         }
-        
+
         // Create a new cache entry with current timestamp
         let entry = CacheEntry {
             analysis,
             timestamp: Instant::now(),
         };
-        
+
         // Insert the entry
         self.cache.insert(path, entry);
     }
@@ -101,12 +101,12 @@ impl Cache {
     pub fn is_empty(&self) -> bool {
         self.cache.is_empty()
     }
-    
+
     /// Get cache statistics
     pub fn stats(&self) -> (usize, usize, usize) {
         (self.len(), self.hits, self.misses)
     }
-    
+
     /// Evict the oldest entries when cache is full
     fn evict_oldest(&mut self) {
         // Find the oldest entry
@@ -118,7 +118,7 @@ impl Cache {
             self.cache.remove(&key_to_remove);
         }
     }
-    
+
     /// Remove expired entries
     pub fn cleanup_expired(&mut self) -> usize {
         if let Some(ttl) = self.ttl {
@@ -128,28 +128,28 @@ impl Cache {
                 .filter(|(_, entry)| now.duration_since(entry.timestamp) > ttl)
                 .map(|(key, _)| key.clone())
                 .collect();
-            
+
             let count = expired_keys.len();
             for key in expired_keys {
                 self.cache.remove(&key);
             }
-            
+
             count
         } else {
             0
         }
     }
-    
+
     /// Record a cache hit
     pub fn record_hit(&mut self) {
         self.hits += 1;
     }
-    
+
     /// Record a cache miss
     pub fn record_miss(&mut self) {
         self.misses += 1;
     }
-    
+
     /// Get the cache hit rate
     pub fn hit_rate(&self) -> f64 {
         let total = self.hits + self.misses;
@@ -179,14 +179,14 @@ impl ThreadSafeCache {
             inner: RwLock::new(Cache::new()),
         }
     }
-    
+
     /// Create a new thread-safe cache with options
     pub fn with_options(max_size: usize, ttl_seconds: Option<u64>) -> Self {
         Self {
             inner: RwLock::new(Cache::with_options(max_size, ttl_seconds)),
         }
     }
-    
+
     /// Get a cached analysis result
     pub fn get(&self, path: &PathBuf) -> Result<Option<PackageAnalysis>> {
         match self.inner.read() {
@@ -201,7 +201,7 @@ impl ThreadSafeCache {
             }),
         }
     }
-    
+
     /// Store an analysis result in the cache
     pub fn insert(&self, path: PathBuf, analysis: PackageAnalysis) -> Result<()> {
         match self.inner.write() {
@@ -216,7 +216,7 @@ impl ThreadSafeCache {
             }),
         }
     }
-    
+
     /// Clear the cache
     pub fn clear(&self) -> Result<()> {
         match self.inner.write() {
@@ -231,7 +231,7 @@ impl ThreadSafeCache {
             }),
         }
     }
-    
+
     /// Get the number of cached entries
     pub fn len(&self) -> Result<usize> {
         match self.inner.read() {
@@ -243,7 +243,7 @@ impl ThreadSafeCache {
             }),
         }
     }
-    
+
     /// Check if the cache is empty
     pub fn is_empty(&self) -> Result<bool> {
         match self.inner.read() {
@@ -255,7 +255,7 @@ impl ThreadSafeCache {
             }),
         }
     }
-    
+
     /// Get cache statistics
     pub fn stats(&self) -> Result<(usize, usize, usize)> {
         match self.inner.read() {
@@ -267,7 +267,7 @@ impl ThreadSafeCache {
             }),
         }
     }
-    
+
     /// Remove expired entries
     pub fn cleanup_expired(&self) -> Result<usize> {
         match self.inner.write() {
