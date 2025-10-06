@@ -12,8 +12,12 @@ cargo build
 # Release build
 cargo build --release
 
-# Run directly
+# Run directly with options
 cargo run -- [OPTIONS]
+
+# Run with common options
+cargo run -- --path ./target-dir --output json
+cargo run -- --exclude node_modules --no-size
 ```
 
 ### Testing
@@ -21,14 +25,24 @@ cargo run -- [OPTIONS]
 # Run all tests
 cargo test
 
-# Run a specific test
-cargo test test_name
-
-# Run tests with output
+# Run tests with output visible
 cargo test -- --nocapture
 
-# Run tests in a specific module
-cargo test --lib module_name
+# Run specific test by name
+cargo test test_cli_args_parsing
+
+# Run tests in specific module
+cargo test --lib core
+cargo test --lib config
+
+# Run only integration tests
+cargo test --test integration_tests
+
+# Run only unit tests
+cargo test --lib
+
+# Run benchmarks
+cargo test --test integration_tests benchmark
 ```
 
 ### Linting and Format
@@ -36,88 +50,122 @@ cargo test --lib module_name
 # Format code
 cargo fmt
 
-# Check formatting
+# Check formatting without changes
 cargo fmt -- --check
 
-# Run linter
+# Run clippy linter
 cargo clippy
 
-# Run linter with all targets
+# Run clippy with all targets and features
 cargo clippy --all-targets --all-features
+
+# Fix clippy warnings automatically
+cargo clippy --fix
 ```
 
 ### Coverage
 ```bash
 # Generate coverage report (requires cargo-tarpaulin)
+cargo install cargo-tarpaulin
 cargo tarpaulin --out html
 ```
 
 ## Architecture
 
-Walker is a Rust CLI application that analyzes Node.js packages in directory structures. The codebase follows a modular architecture:
+Walker is a Rust CLI application that analyzes Node.js packages in directory structures. The codebase follows a modular architecture with clear separation of concerns.
 
 ### Core Components
 
 1. **CLI Layer** (`src/cli/`)
-   - `args.rs`: Command-line argument parsing using clap
-   - `commands.rs`: Command execution logic
-   - Entry point converts arguments to commands for execution
+   - `args.rs`: Command-line argument parsing using clap derive macros
+   - `commands.rs`: Command execution logic and orchestration
+   - Converts parsed arguments into executable commands
 
 2. **Core Analysis** (`src/core/`)
-   - `walker.rs`: Main directory traversal logic
-   - `parallel_walker.rs`: Parallel processing implementation using rayon
-   - `analyzer.rs`: Package analysis logic (ESM/CommonJS detection)
-   - `cache.rs`: Caching system for performance optimization
-   - `streaming.rs`: Streaming analysis for large directories
+   - `walker.rs`: Main directory traversal logic using walkdir
+   - `parallel_walker.rs`: Parallel processing implementation using rayon thread pool
+   - `analyzer.rs`: Package analysis logic for module system detection
+   - `cache.rs`: File-based caching system with timestamp validation
+   - `streaming.rs`: Streaming analysis for memory-efficient large directory handling
+   - `parallel.rs`: Parallel processing utilities and thread pool configuration
 
 3. **Configuration** (`src/config/`)
-   - `settings.rs`: Main settings structure
-   - `parser.rs`: TOML configuration parsing
-   - `file.rs`: Configuration file discovery and loading
-   - Supports hierarchical config: CLI args > file config > defaults
+   - `settings.rs`: Main Settings struct with all configuration options
+   - `parser.rs`: TOML configuration file parsing
+   - `file.rs`: Configuration file discovery (checks .walker.toml, ~/.walker.toml, XDG paths)
+   - `cli.rs`: CLI configuration conversion to Settings
+   - Hierarchy: CLI args override file config which overrides defaults
 
 4. **Error Handling** (`src/error/`)
-   - `types.rs`: Custom error types with severity levels
-   - `context.rs`: Error context and user-friendly messages
-   - All errors include suggestions for resolution
+   - `types.rs`: WalkerError enum with variants for different error types
+   - `context.rs`: Error context traits using ResultExt for adding user-friendly messages
+   - All errors include severity levels (Warning, Error, Critical) and resolution suggestions
 
 5. **Models** (`src/models/`)
-   - `package.rs`: Package data structures (ModuleSupport, PackageDetails)
-   - `analysis.rs`: Analysis results and summary structures
-   - `config.rs`: Configuration-related models
+   - `package.rs`: Core data structures (ModuleSupport, PackageDetails, DependencyCounts)
+   - `analysis.rs`: AnalysisResults, AnalysisSummary, ErrorTracking, PerformanceMetrics
+   - `config.rs`: Configuration-related models and OutputFormat enum
 
 6. **Output** (`src/output/`)
-   - `formatters.rs`: Text, JSON, and CSV formatters
-   - `progress.rs`: Progress reporting using indicatif
-   - `writers.rs`: File and stdout output handling
+   - `formatters.rs`: Trait-based formatters (TextFormatter, JsonFormatter, CsvFormatter)
+   - `progress.rs`: Progress reporting using indicatif with spinner and progress bars
+   - `writers.rs`: Output writers for file and stdout with automatic format detection
 
 7. **Parsers** (`src/parsers/`)
-   - `package_json.rs`: package.json parsing and analysis
-   - `exports.rs`: Module exports detection logic
+   - `package_json.rs`: Comprehensive package.json parsing with serde_json
+   - `exports.rs`: Module exports and conditional exports detection
 
 ### Key Design Patterns
 
-- **Error Recovery**: Uses `try_with_recovery` for graceful error handling
-- **Parallel Processing**: Default parallel analysis with opt-out via `--no-parallel`
-- **Builder Pattern**: ConfigBuilder for flexible configuration
-- **Strategy Pattern**: Pluggable formatters and writers
-- **Progress Reporting**: Non-blocking progress updates during analysis
+- **Error Recovery**: `try_with_recovery` pattern for continuing after non-critical errors
+- **Parallel Processing**: Default parallel analysis with work-stealing using rayon
+- **Builder Pattern**: ConfigBuilder for incremental configuration construction
+- **Strategy Pattern**: Formatter trait for pluggable output formats
+- **Observer Pattern**: Progress callbacks for non-blocking UI updates
+- **Resource Management**: RAII with Drop traits for cleanup
 
 ### Module System Detection Logic
 
-The analyzer checks for ESM support by examining:
-- `"type": "module"` in package.json
-- Presence of .mjs files
-- Export maps in package.json
+The analyzer (`src/core/analyzer.rs`) determines module support through:
 
-CommonJS support is detected through:
-- Default behavior (absence of `"type": "module"`)
-- Presence of .cjs files
-- CommonJS-specific fields in package.json
+**ESM Detection**:
+- `"type": "module"` in package.json
+- Presence of `.mjs` files in package directory
+- `"exports"` field with ESM-specific conditions
+- `"module"` field pointing to ESM entry
+
+**CommonJS Detection**:
+- Default when no `"type": "module"` is present
+- Presence of `.cjs` files
+- `"main"` field without ESM indicators
+- `require()` usage patterns in exports
+
+**Dual Mode Detection**:
+- Both ESM and CommonJS indicators present
+- Conditional exports supporting both `"import"` and `"require"`
 
 ### Performance Considerations
 
-- Parallel processing by default using rayon
-- Optional caching system to avoid re-analyzing unchanged packages
-- Size calculation can be disabled with `--no-size` for faster scans
-- Progress reporting designed to not impact performance
+- **Parallel by Default**: Uses available CPU cores via rayon
+- **Smart Caching**: SHA-256 based cache invalidation in `~/.cache/walker`
+- **Size Calculation**: Optional via `--no-size` flag (major performance boost)
+- **Progress Reporting**: Separate thread to avoid blocking analysis
+- **Memory Efficiency**: Streaming mode for directories with >10,000 packages
+
+### Testing Structure
+
+Tests are organized into:
+- **Unit Tests**: In `tests/unit/` for individual components
+- **Integration Tests**: In `tests/integration/` for end-to-end scenarios
+- **Test Fixtures**: In `tests/fixtures/` with sample package structures
+- Tests use `tempfile` for isolated file system operations
+
+### Configuration Priority
+
+Configuration is resolved in this order (highest priority first):
+1. Command-line arguments
+2. Configuration file specified via `--config`
+3. `.walker.toml` in current directory
+4. `~/.walker.toml` in home directory
+5. `~/.config/walker/config.toml` (XDG config)
+6. Built-in defaults from `src/config/default_config.toml`
