@@ -4,7 +4,6 @@
 //! and error collection, using rayon for parallel processing.
 
 use crate::core::analyzer::Analyzer;
-use crate::core::cache::ThreadSafeCache;
 use crate::core::parallel::ProgressUpdate;
 // Temporarily comment out the streaming implementation until we fix the compilation errors
 // use crate::core::streaming::StreamingProcessor;

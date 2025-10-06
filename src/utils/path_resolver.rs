@@ -1,6 +1,6 @@
 //! Module path resolution utilities
 
-use crate::error::{Result, WalkerError};
+use crate::error::Result;
 use crate::models::package::PackageDetails;
 use crate::parsers::package_json::PackageJsonParser;
 use dashmap::DashMap;

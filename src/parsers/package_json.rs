@@ -64,9 +64,9 @@ impl PackageJsonParser {
         details.files = Self::extract_optional_string_array(&obj, "files");
         details.man = Self::extract_optional_value(&obj, "man");
         details.directories = Self::extract_optional_value(&obj, "directories");
-        details.sideEffects = Self::extract_optional_value(&obj, "sideEffects");
+        details.side_effects = Self::extract_optional_value(&obj, "side_effects");
         details.funding = Self::extract_optional_value(&obj, "funding");
-        details.publishConfig = Self::extract_optional_value(&obj, "publishConfig");
+        details.publish_config = Self::extract_optional_value(&obj, "publish_config");
 
         // Extract complex fields
         details.author = Self::extract_author(&obj);

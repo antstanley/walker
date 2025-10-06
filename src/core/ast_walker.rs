@@ -2,7 +2,6 @@
 
 use crate::error::{Result, WalkerError};
 use crate::models::ast::{ASTAnalysisResults, AnalysisError, AnalysisErrorType};
-use crate::models::package::PackageDetails;
 use crate::parsers::dependency_graph_builder::{DependencyGraphBuilder, GraphBuilderConfig};
 use crate::parsers::package_json::PackageJsonParser;
 use std::path::{Path, PathBuf};

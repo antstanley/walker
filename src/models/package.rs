@@ -32,14 +32,14 @@ pub struct PackageDetails {
     pub bundled_dependencies: Option<Vec<String>>,
     pub funding: Option<serde_json::Value>,
     pub private: Option<bool>,
-    pub publishConfig: Option<serde_json::Value>,
+    pub publish_config: Option<serde_json::Value>,
     pub os: Option<Vec<String>>,
     pub cpu: Option<Vec<String>>,
     pub workspaces: Option<serde_json::Value>,
     pub files: Option<Vec<String>>,
     pub man: Option<serde_json::Value>,
     pub directories: Option<serde_json::Value>,
-    pub sideEffects: Option<serde_json::Value>,
+    pub side_effects: Option<serde_json::Value>,
 }
 
 /// Author information from package.json
@@ -107,14 +107,14 @@ impl Default for PackageDetails {
             bundled_dependencies: None,
             funding: None,
             private: None,
-            publishConfig: None,
+            publish_config: None,
             os: None,
             cpu: None,
             workspaces: None,
             files: None,
             man: None,
             directories: None,
-            sideEffects: None,
+            side_effects: None,
         }
     }
 }
